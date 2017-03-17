@@ -10,8 +10,10 @@ logger = logging.getLogger('logs_api')
 HOST = 'https://api-metrika.yandex.ru'
 
 
-def get_active_counters(app: str, token: str) -> tuple:
-    """Returns tuple of available counters"""
+def get_active_counters(user_request) -> tuple:
+    """Returns tuple of available counters as strings"""
+    app = user_request.app_id
+    token = user_request.token
     reply = requests.get(r'https://api-metrika.yandex.ru/management/v1/counters',
                          {'id': app, 'oauth_token': token})
     counters = reply.json()['counters']
@@ -146,8 +148,12 @@ def save_data(api_request, part, destination):
     num_filtered = len(splitted_text) - len(splitted_text_filtered)
     if num_filtered != 0:
         logger.warning('%d rows were filtered out' % num_filtered)
-        dump_path = api_request.user_request.dump_path
-        filtered_out_file = os.path.join(dump_path, 'filtered.txt')
+        filtered_out_file = os.path.join(api_request.user_request.dump_path,
+                                         'filtered_{counter}_{start}_{end}_{part}.txt'
+                                         .format(counter=api_request.user_request.counter_id,
+                                                 start=api_request.user_request.start_date_str,
+                                                 end=api_request.user_request.end_date_str,
+                                                 part=api_request.user_request.part))
         splitted_text_filtered_out = list(filter(lambda x: len(x.split('\t')) != headers_num, splitted_text))
         with open(filtered_out_file, 'w') as fo:
             fo.write('\n'.join(splitted_text_filtered_out))
@@ -156,11 +162,7 @@ def save_data(api_request, part, destination):
     output_data = output_data.replace(r"\'", "'")      # to correct escapes in params
     output_data = bytes(output_data, encoding='utf8')
 
-    # for debug:
-    with open(r'dumps\raw_data.txt', 'w') as raw_log:
-        raw_log.write(str(output_data))
-
-    destination.save_data(api_request.user_request, output_data)
+    destination.save_data(api_request.user_request, output_data, part)
 
     api_request.status = 'saved'
 

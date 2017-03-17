@@ -46,11 +46,14 @@ def get_date_period(opt):
     return start_date_str, end_date_str
 
 
-def build_user_request(conf, opt, counter=None):
+def build_user_request(conf, opt, counter=None, span=None):
     """Create user request as a named tuple"""
     logger.info('CLI Options: ' + str(opt))
 
-    start_date_str, end_date_str = get_date_period(opt)
+    if span is None:
+        start_date_str, end_date_str = get_date_period(opt)
+    else:
+        start_date_str, end_date_str = span
     source = opt.source
 
     # Validate that fields are present in conf
@@ -61,10 +64,11 @@ def build_user_request(conf, opt, counter=None):
     # Creating data structure (immutable tuple) with initial user request
     UserRequest = namedtuple(
         "UserRequest",
-        "token counter_id start_date_str end_date_str source fields retries retries_delay dump_path"
+        "app_id token counter_id start_date_str end_date_str source fields retries retries_delay dump_path"
     )
 
     user_req = UserRequest(
+        app_id=conf['app_id'],
         token=conf['token'],
         counter_id=(counter or conf['counter_id']),
         start_date_str=start_date_str,
@@ -132,11 +136,13 @@ if __name__ == '__main__':
     else:
         raise ValueError('Wrong argument: dest = ' + options.dest)
 
+    user_request = build_user_request(config, options)
+
     # choose counter [from config | from cli options | all avaibalbe counters]
     if options.counter is None:
         counters = (config['counter_id'],)
     elif options.counter == 'all':
-        counters = logs_api.get_active_counters(config['app_id'], config['token'])
+        counters = logs_api.get_active_counters(user_request)
     elif options.counter != 'all':
         counters = (options.counter,)
     else:
@@ -146,11 +152,16 @@ if __name__ == '__main__':
         user_request = build_user_request(config, options, counter=cntr)
 
         # If data for specified period is already in database, script is skipped
-        if destination.is_data_present(user_request):
-            logging.critical('Data for selected dates is already in database')
-            exit(0)
+        missing_time_spans = destination.data_missing_time_spans(user_request)
+        exit(0)
 
-        integrate_with_logs_api(user_request, destination)
+        if len(missing_time_spans) == 0:
+            logger.info('### DATA IS PRESENT FOR counter={counter}, start_date={start}, end_date={end}'
+                        .format(counter=cntr, start=user_request.start_date_str, end=user_request.end_date_str))
+
+        for timespan in missing_time_spans:
+            user_request = build_user_request(config, options, counter=cntr, span=timespan)
+            integrate_with_logs_api(user_request, destination)
 
     end_time = time.time()
     logger.info('### TOTAL TIME: %d minutes %d seconds' % (

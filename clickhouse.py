@@ -138,7 +138,7 @@ def create_table(source, fields):
     get_data(query)
 
 
-def save_data(user_req, data):
+def save_data(user_req, data, part=None):
     """Inserts data into ClickHouse table"""
 
     if not is_db_present():

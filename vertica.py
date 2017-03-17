@@ -1,4 +1,5 @@
 import os
+import datetime
 import logging
 import pyodbc
 import gzip
@@ -61,12 +62,15 @@ def get_data(handler, query: str) -> list:
     return rows
 
 
-def upload(user_req, handler, content: bytes):
+def upload(user_req, handler, content: bytes, part):
     """Uploads data to table in Vertica"""
-    dump_path = user_req.dump_path
-    dump_file = os.path.join(dump_path, 'content.tsv.gz')
-    rejected_file = os.path.join(dump_path, 'rejected.txt')
-    exceptions_file = os.path.join(dump_path, 'exceptions.txt')
+    dump_file = os.path.join(user_req.dump_path, 'content.tsv.gz')
+    rejected_file = os.path.join(user_req.dump_path, 'rejected_{counter}_{start}_{end}_{part}.txt'
+                                 .format(counter=user_req.counter_id, start=user_req.start_date_str,
+                                         end=user_req.end_date_str, part=part))
+    exceptions_file = os.path.join(user_req.dump_path, 'exceptions_{counter}_{start}_{end}_{part}.txt'
+                                   .format(counter=user_req.counter_id, start=user_req.start_date_str,
+                                           end=user_req.end_date_str, part=part))
     table = get_source_table_name(user_req.source)
     with gzip.open(dump_file, 'w') as data_dump:
         data_dump.write(content)
@@ -85,6 +89,8 @@ def upload(user_req, handler, content: bytes):
                         .format(file=dump_file, table=table))
         disconnect(handler)
         raise e
+    # (1) remove dump
+    # (2) remove rejected and exceptions if size = 0
 
 
 def get_source_table_name(source) -> str:
@@ -166,14 +172,14 @@ def create_table(handler, source, fields):
         raise e
 
 
-def save_data(user_req, data):
+def save_data(user_req, data, part=None):
     """Inserts data into Vertica table"""
     handler = get_handler()
 
     if not is_table_present(handler, user_req.source):
         create_table(handler, user_req.source, user_req.fields)
 
-    upload(user_req, handler, data)
+    upload(user_req, handler, data, part)
     disconnect(handler)
 
 
@@ -200,4 +206,54 @@ def is_data_present(user_request) -> bool:
     disconnect(handler)
 
     return rows[0][0] > 0
+
+
+def data_missing_time_spans(user_request) -> tuple:
+    """Returns tuple of date spans of the form (start_date, end_date) for the given request parameters
+        (user_request.counter_id, user_request.start_date_str, user_request.end_date_str)"""
+    handler = get_handler()
+
+    # unpack:
+    start_date_str = user_request.start_date_str
+    end_date_str = user_request.end_date_str
+    counter = user_request.counter_id
+    source = user_request.source
+
+    if not is_table_present(handler, source):
+        return start_date_str, end_date_str
+
+    table_name = get_source_table_name(source)
+    query = '''
+        SELECT
+            date,
+            count(*) cnt
+        FROM {table}
+        WHERE date between '{start_date}' AND '{end_date}'
+            AND counter_id = {counter}
+        GROUP BY 1
+        ORDER BY 1;
+    '''.format(table=table_name, start_date=start_date_str, end_date=end_date_str, counter=counter)
+
+    rows = get_data(handler, query)
+    disconnect(handler)
+
+    if len(rows) == 0:
+        return tuple()
+    else:
+        spans, span = [], []
+        for i in range(len(rows)):
+            if len(span) == 0:
+                span.append(rows[i][0])
+            if rows[i][0] - datetime.timedelta(days=1) <= span[-1]:
+                span.append(rows[i][0])
+            else:
+                spans.append(('{:%Y-%m-%d}'.format(span[0]), '{:%Y-%m-%d}'.format(span[-1])))
+                span = []
+            if i + 1 == len(rows):
+                if len(span) == 0:
+                    span.append(rows[i][0])
+                spans.append(('{:%Y-%m-%d}'.format(span[0]), '{:%Y-%m-%d}'.format(span[-1])))
+                span = []
+        return tuple(spans)
+
 
