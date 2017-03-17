@@ -115,15 +115,16 @@ def create_table(source, fields):
             engine = 'MergeTree(Date, intHash32(ClientID), (Date, intHash32(ClientID)), 8192)'
         else:
             engine = 'Log'
-
-    if source == 'visits':
+    elif source == 'visits':
         if ('ym:s:date' in fields) and ('ym:s:clientID' in fields):
             engine = 'MergeTree(Date, intHash32(ClientID), (Date, intHash32(ClientID)), 8192)'
         else:
             engine = 'Log'
+    else:
+        raise ValueError('Wrong argument: source = ' + source)
 
     ch_field_types = utils.get_fields_config()
-    ch_fields = map(get_ch_field_name, fields)
+    ch_fields = list(map(get_ch_field_name, fields))
 
     for i in range(len(fields)):
         field_statements.append(field_tmpl.format(name=ch_fields[i],
@@ -137,16 +138,16 @@ def create_table(source, fields):
     get_data(query)
 
 
-def save_data(source, fields, data):
+def save_data(user_req, data):
     """Inserts data into ClickHouse table"""
 
     if not is_db_present():
         create_db()
 
-    if not is_table_present(source):
-        create_table(source, fields)
+    if not is_table_present(user_req.source):
+        create_table(user_req.source, user_req.fields)
 
-    upload(get_source_table_name(source), data)
+    upload(get_source_table_name(user_req.source), data)
 
 
 def is_data_present(start_date_str, end_date_str, source):
