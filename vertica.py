@@ -177,9 +177,14 @@ def save_data(user_req, data):
     disconnect(handler)
 
 
-def is_data_present(start_date_str: str, end_date_str: str, source) -> bool:
+def is_data_present(user_request) -> bool:
     """Returns whether there is a records in database for particular date range and source"""
     handler = get_handler()
+
+    # unpack:
+    start_date_str = user_request.start_date_str
+    end_date_str = user_request.end_date_str
+    source = user_request.source
 
     if not is_table_present(handler, source):
         return False

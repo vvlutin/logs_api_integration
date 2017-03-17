@@ -10,6 +10,15 @@ logger = logging.getLogger('logs_api')
 HOST = 'https://api-metrika.yandex.ru'
 
 
+def get_active_counters(app: str, token: str) -> tuple:
+    """Returns tuple of available counters"""
+    reply = requests.get(r'https://api-metrika.yandex.ru/management/v1/counters',
+                         {'id': app, 'oauth_token': token})
+    counters = reply.json()['counters']
+    cntrs = [str(c['id']) for c in counters if c['code_status'] == 'CS_OK']
+    return tuple(cntrs)
+
+
 def get_estimation(user_request):
     """Returns estimation of Logs API (whether it's possible to load data and max period in days)"""
     url = '{host}/management/v1/counter/{counter_id}/logrequests/evaluate?' \

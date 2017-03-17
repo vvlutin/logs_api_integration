@@ -46,7 +46,7 @@ def get_date_period(opt):
     return start_date_str, end_date_str
 
 
-def build_user_request(conf, opt):
+def build_user_request(conf, opt, counter=None):
     """Create user request as a named tuple"""
     logger.info('CLI Options: ' + str(opt))
 
@@ -66,7 +66,7 @@ def build_user_request(conf, opt):
 
     user_req = UserRequest(
         token=conf['token'],
-        counter_id=conf['counter_id'],
+        counter_id=(counter or conf['counter_id']),
         start_date_str=start_date_str,
         end_date_str=end_date_str,
         source=source,
@@ -124,8 +124,7 @@ if __name__ == '__main__':
     setup_logging(config)
     options = utils.get_cli_options()
 
-    user_request = build_user_request(config, options)
-
+    # choose from available destinations
     if (options.dest is None) or (options.dest == 'clickhouse'):
         destination = clickhouse
     elif options.dest == 'vertica':
@@ -133,13 +132,25 @@ if __name__ == '__main__':
     else:
         raise ValueError('Wrong argument: dest = ' + options.dest)
 
-    # If data for specified period is already in database, script is skipped
-    if destination.is_data_present(user_request.start_date_str, user_request.end_date_str,
-                                   user_request.source):
-        logging.critical('Data for selected dates is already in database')
-        exit(0)
+    # choose counter [from config | from cli options | all avaibalbe counters]
+    if options.counter is None:
+        counters = (config['counter_id'],)
+    elif options.counter == 'all':
+        counters = logs_api.get_active_counters(config['app_id'], config['token'])
+    elif options.counter != 'all':
+        counters = (options.counter,)
+    else:
+        raise ValueError('Wrong argument: counter = ' + options.counter)
 
-    integrate_with_logs_api(user_request, destination)
+    for cntr in counters:
+        user_request = build_user_request(config, options, counter=cntr)
+
+        # If data for specified period is already in database, script is skipped
+        if destination.is_data_present(user_request):
+            logging.critical('Data for selected dates is already in database')
+            exit(0)
+
+        integrate_with_logs_api(user_request, destination)
 
     end_time = time.time()
     logger.info('### TOTAL TIME: %d minutes %d seconds' % (

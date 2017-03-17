@@ -1,5 +1,6 @@
 {
 	"token" : "<your_token>",
+	"app_id": "<your_app_id>",
 	"counter_id": "<your_counter_id>",
 	"visits_fields": [
 	    "ym:s:counterID",

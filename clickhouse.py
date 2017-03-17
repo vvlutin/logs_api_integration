@@ -150,10 +150,15 @@ def save_data(user_req, data):
     upload(get_source_table_name(user_req.source), data)
 
 
-def is_data_present(start_date_str, end_date_str, source):
+def is_data_present(user_request):
     """Returns whether there is a records in database for particular date range and source"""
     if not is_db_present():
         return False
+
+    # unpack:
+    start_date_str = user_request.start_date_str
+    end_date_str = user_request.end_date_str
+    source = user_request.source
 
     if not is_table_present(source):
         return False
