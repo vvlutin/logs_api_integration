@@ -31,6 +31,8 @@ def validate_cli_options(options):
     else:
         assert options.mode in ['history', 'regular', 'regular_early'], \
             'Wrong mode in CLI options'
+    assert options.dest in (None, 'clickhouse', 'vertica'),\
+        'If destition is specified, it must be in (clickhouse, vertica)'
 
 
 def get_cli_options():
@@ -43,10 +45,11 @@ def get_cli_options():
     parser.add_argument('-dest', help='Destination (clickhouse or vertica)')
     options = parser.parse_args()
     validate_cli_options(options)
+
     return options
 
 
-def get_counter_creation_date(counter_id, token):
+def get_counter_creation_date(counter_id, token) -> str:
     """Returns create date for counter"""
     host = 'https://api-metrika.yandex.ru'
     url = '{host}/management/v1/counter/{counter_id}?oauth_token={token}' \
@@ -58,7 +61,7 @@ def get_counter_creation_date(counter_id, token):
         return date
 
 
-def get_config():
+def get_config() -> dict:
     """Returns user config"""
     with open('./configs/config_prod.json') as input_file:
         config = json.loads(input_file.read())
@@ -68,16 +71,17 @@ def get_config():
     assert 'retries' in config, 'Number of retries should be specified in config'
     assert 'retries_delay' in config, 'Delay between retries should be specified in config'
     assert ('clickhouse' in config) or ('vertica' in config), 'Destination should be specified in config'
+    # add dump path validation
     return config
 
 
-def camel_to_snake(name):
+def camel_to_snake(name: str) -> str:
     """Converts camal-case string to snake-case (underscore-separated)"""
     s1 = re.sub('(.)([A-Z][a-z]+)', r'\1_\2', name)
     return re.sub('([a-z0-9])([A-Z])', r'\1_\2', s1).lower()
 
 
-def get_fields_config(dbtype='clickhouse'):
+def get_fields_config(dbtype='clickhouse') -> dict:
     """Returns config for ClickHouse columns\'s datatypes"""
     if (dbtype is None) or (dbtype == 'clickhouse'):
         prefix = 'ch'

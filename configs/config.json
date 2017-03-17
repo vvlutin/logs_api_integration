@@ -49,5 +49,6 @@
 		"visits_table": "visits_all",
 		"hits_table": "hits_all",
 		"database": "default"
-	}
+	},
+	"dump_path": "C:\\"
 }

@@ -61,30 +61,33 @@ def build_user_request(conf, opt):
     # Creating data structure (immutable tuple) with initial user request
     UserRequest = namedtuple(
         "UserRequest",
-        "token counter_id start_date_str end_date_str source fields"
+        "token counter_id start_date_str end_date_str source fields retries retries_delay dump_path"
     )
 
-    logs_request = UserRequest(
+    user_req = UserRequest(
         token=conf['token'],
         counter_id=conf['counter_id'],
         start_date_str=start_date_str,
         end_date_str=end_date_str,
         source=source,
         fields=tuple(fields),
+        retries=conf['retries'],
+        retries_delay=conf['retries_delay'],
+        dump_path=conf['dump_path']
     )
 
-    logger.info(logs_request)
-    utils.validate_user_request(logs_request)  # unnecessary check
-    return logs_request
+    logger.info(user_req)
+    utils.validate_user_request(user_req)  # unnecessary check
+    return user_req
 
 
-def integrate_with_logs_api(conf, logs_request, dest):
+def integrate_with_logs_api(user_req, dest):
     """Attempt fetching data from Logs API and saving to dest (clickhouse, vertica)"""
-    for i in range(conf['retries']):
-        time.sleep(i * conf['retries_delay'])
+    for i in range(user_req.retries):
+        time.sleep(i * user_req.retries_delay)
         try:
             # Creating API requests
-            api_requests = logs_api.get_api_requests(logs_request)
+            api_requests = logs_api.get_api_requests(user_req)
 
             for api_request in api_requests:
                 logger.info('### CREATING TASK')
@@ -109,7 +112,7 @@ def integrate_with_logs_api(conf, logs_request, dest):
                 # !!! ADD analyze_statistics
         except Exception as e:
             logger.critical('Iteration #{i} failed'.format(i=i + 1))
-            if i == conf['retries'] - 1:
+            if i == user_req.retries - 1:
                 raise e
 
 
@@ -122,12 +125,13 @@ if __name__ == '__main__':
     options = utils.get_cli_options()
 
     user_request = build_user_request(config, options)
+
     if (options.dest is None) or (options.dest == 'clickhouse'):
         destination = clickhouse
     elif options.dest == 'vertica':
         destination = vertica
     else:
-        raise ValueError("Wrong 'dest' parameter: " + options.dest)
+        raise ValueError('Wrong argument: dest = ' + options.dest)
 
     # If data for specified period is already in database, script is skipped
     if destination.is_data_present(user_request.start_date_str, user_request.end_date_str,
@@ -135,7 +139,7 @@ if __name__ == '__main__':
         logging.critical('Data for selected dates is already in database')
         exit(0)
 
-    integrate_with_logs_api(config, user_request, destination)
+    integrate_with_logs_api(user_request, destination)
 
     end_time = time.time()
     logger.info('### TOTAL TIME: %d minutes %d seconds' % (

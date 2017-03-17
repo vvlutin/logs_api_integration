@@ -1,3 +1,4 @@
+import os
 import datetime
 import logging
 import requests
@@ -78,7 +79,7 @@ def create_task(api_request):
     r = requests.post(url, {'date1': api_request.date1_str,
                             'date2': api_request.date2_str,
                             'source': api_request.user_request.source,
-                            'fields': ','.join(sorted(api_request.user_request.fields, key=lambda s: s.lower())),
+                            'fields': ','.join(api_request.user_request.fields),
                             'oauth_token': api_request.user_request.token})
     logger.debug(r.text)
     if r.status_code == 200:
@@ -136,14 +137,21 @@ def save_data(api_request, part, destination):
     num_filtered = len(splitted_text) - len(splitted_text_filtered)
     if num_filtered != 0:
         logger.warning('%d rows were filtered out' % num_filtered)
+        dump_path = api_request.user_request.dump_path
+        filtered_out_file = os.path.join(dump_path, 'filtered.txt')
+        splitted_text_filtered_out = list(filter(lambda x: len(x.split('\t')) != headers_num, splitted_text))
+        with open(filtered_out_file, 'w') as fo:
+            fo.write('\n'.join(splitted_text_filtered_out))
 
     output_data = '\n'.join(splitted_text_filtered)
     output_data = output_data.replace(r"\'", "'")      # to correct escapes in params
     output_data = bytes(output_data, encoding='utf8')
 
-    destination.save_data(api_request.user_request.source,
-                          api_request.user_request.fields,
-                          output_data)
+    # for debug:
+    with open(r'dumps\raw_data.txt', 'w') as raw_log:
+        raw_log.write(str(output_data))
+
+    destination.save_data(api_request.user_request, output_data)
 
     api_request.status = 'saved'
 
