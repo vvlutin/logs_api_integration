@@ -174,3 +174,15 @@ def is_data_present(user_request):
 
     visits = get_data(query, CH_HOST)
     return visits != ''
+
+
+def data_missing_time_spans(user_request) -> tuple:
+    """IMPLEMENT LATER"""
+    pass
+
+
+def analyze_statistics(source):
+    """Stub for compliance with interface"""
+    pass
+
+

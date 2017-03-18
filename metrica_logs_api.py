@@ -153,7 +153,6 @@ if __name__ == '__main__':
 
         # If data for specified period is already in database, script is skipped
         missing_time_spans = destination.data_missing_time_spans(user_request)
-        exit(0)
 
         if len(missing_time_spans) == 0:
             logger.info('### DATA IS PRESENT FOR counter={counter}, start_date={start}, end_date={end}'
@@ -163,8 +162,11 @@ if __name__ == '__main__':
             user_request = build_user_request(config, options, counter=cntr, span=timespan)
             integrate_with_logs_api(user_request, destination)
 
+    destination.analyze_statistics(user_request.source)
+
     end_time = time.time()
     logger.info('### TOTAL TIME: %d minutes %d seconds' % (
         (end_time - start_time) / 60,
         (end_time - start_time) % 60
     ))
+

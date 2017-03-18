@@ -257,3 +257,15 @@ def data_missing_time_spans(user_request) -> tuple:
         return tuple(spans)
 
 
+def analyze_statistics(source):
+    """Analyze table statistics"""
+    handler = get_handler()
+
+    if is_table_present(handler, source):
+        table = get_source_table_name(source)
+        try:
+            handler.cursor.execute("""SELECT ANALIZE_STATISTICS('{table}')""".format(table=table))
+        except Exception as e:
+            logger.warning('Unable to analyze statistics for {table}.'.format(table=table))
+
+    disconnect(handler)

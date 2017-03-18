@@ -73,7 +73,6 @@ def get_config() -> dict:
     assert 'retries_delay' in config, 'Delay between retries should be specified in config'
     assert ('clickhouse' in config) or ('vertica' in config), 'Destination should be specified in config'
     assert ('vertica' not in config) or ('dump_path' in config), 'Specify dump_path for vetica destination'
-    # add dump path validation
     return config
 
 
