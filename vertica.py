@@ -239,7 +239,6 @@ def data_missing_time_spans(user_request) -> tuple:
     handler = get_handler()
 
     if not is_table_present(handler, user_request.source):
-        # print('data_missing_time_spans', 'not is_table_present')
         return tuple([(user_request.start_date_str, user_request.end_date_str)])
 
     table_name = get_source_table_name(user_request.source)
@@ -259,18 +258,14 @@ def data_missing_time_spans(user_request) -> tuple:
     disconnect(handler)
 
     if len(rows) == 0:
-        # print('data_missing_time_spans', 'len(rows) == 0')
         return tuple([(user_request.start_date_str, user_request.end_date_str)])
     else:
         # find missing dates
         dates = [d[0] for d in rows]
-        # print('data_missing_time_spans', 'OTHER', 'dates', dates)
         start_date = datetime.datetime.strptime(user_request.start_date_str, utils.DATE_FORMAT)
         end_date = datetime.datetime.strptime(user_request.end_date_str, utils.DATE_FORMAT)
         required = [datetime.datetime.date(start_date + datetime.timedelta(days=i)) for i in range((end_date - start_date).days + 1)]
-        # print('data_missing_time_spans', 'OTHER', 'required', required)
         missing = [d for d in required if d not in dates]
-        # print('data_missing_time_spans', 'OTHER', 'missing', missing)
 
         # convert list of individual dates to list of date spans [(start_i, end_i)]
         spans, span = [], []
@@ -281,13 +276,9 @@ def data_missing_time_spans(user_request) -> tuple:
                 span.append(missing[i])
             else:
                 spans.append(('{:%Y-%m-%d}'.format(span[0]), '{:%Y-%m-%d}'.format(span[-1])))
-                span = []
+                span = [missing[i]]
             if i + 1 == len(missing):
-                if len(span) == 0:
-                    span.append(missing[i])
                 spans.append(('{:%Y-%m-%d}'.format(span[0]), '{:%Y-%m-%d}'.format(span[-1])))
-                span = []
-        print('data_missing_time_spans', 'OTHER', 'spans', spans)
         return tuple(spans)
 
 
