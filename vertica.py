@@ -65,12 +65,17 @@ def get_data(handler, query: str) -> list:
 def upload(user_req, handler, content: bytes, part):
     """Uploads data to table in Vertica"""
     dump_file = os.path.join(user_req.dump_path, 'content.tsv.gz')
+
     rejected_file = os.path.join(user_req.dump_path, 'rejected_{counter}_{start}_{end}_{part}.txt'
-                                 .format(counter=user_req.counter_id, start=user_req.start_date_str,
-                                         end=user_req.end_date_str, part=part))
+                                 .format(counter=user_req.counter_id,
+                                         start=user_req.start_date_str, end=user_req.end_date_str,
+                                         part=part))
+
     exceptions_file = os.path.join(user_req.dump_path, 'exceptions_{counter}_{start}_{end}_{part}.txt'
-                                   .format(counter=user_req.counter_id, start=user_req.start_date_str,
-                                           end=user_req.end_date_str, part=part))
+                                   .format(counter=user_req.counter_id,
+                                           start=user_req.start_date_str, end=user_req.end_date_str,
+                                           part=part))
+
     table = get_source_table_name(user_req.source)
 
     with gzip.open(dump_file, 'w') as data_dump:
@@ -151,6 +156,7 @@ def get_vt_field_name(field_name: str) -> str:
 def drop_table(handler, source):
     """Drops table in Vertica"""
     table_name = get_source_table_name(source)
+
     query = 'DROP TABLE IF EXISTS {table};'.format(table=table_name)
     try:
         handler.cursor.execute(query)
@@ -187,10 +193,9 @@ def create_table(handler, source, fields):
                         segmentation_clause=segmentation_clause,
                         fields=',\n'.join(field_statements))
 
-    logger.info('CREATE table query:\n' + query)
-
     try:
         handler.cursor.execute(query)
+        logger.info('Destination table is created: {name}'.format(name=table_name))
     except Exception as e:
         logger.critical('Unable to CREATE table ' + table_name)
         disconnect(handler)
@@ -212,20 +217,15 @@ def is_data_present(user_request) -> bool:
     """Returns whether there is a records in database for particular date range and source"""
     handler = get_handler()
 
-    # unpack:
-    start_date_str = user_request.start_date_str
-    end_date_str = user_request.end_date_str
-    source = user_request.source
-
-    if not is_table_present(handler, source):
+    if not is_table_present(handler, user_request.source):
         return False
 
-    table_name = get_source_table_name(source)
+    table_name = get_source_table_name(user_request.source)
     query = '''
         SELECT count(*) cnt
         FROM {table}
         WHERE date between '{start_date}' AND '{end_date}';
-    '''.format(table=table_name, start_date=start_date_str, end_date=end_date_str)
+    '''.format(table=table_name, start_date=user_request.start_date_str, end_date=user_request.end_date_str)
 
     rows = get_data(handler, query)
     disconnect(handler)
@@ -239,6 +239,7 @@ def data_missing_time_spans(user_request) -> tuple:
     handler = get_handler()
 
     if not is_table_present(handler, user_request.source):
+        # print('data_missing_time_spans', 'not is_table_present')
         return tuple([(user_request.start_date_str, user_request.end_date_str)])
 
     table_name = get_source_table_name(user_request.source)
@@ -258,14 +259,18 @@ def data_missing_time_spans(user_request) -> tuple:
     disconnect(handler)
 
     if len(rows) == 0:
+        # print('data_missing_time_spans', 'len(rows) == 0')
         return tuple([(user_request.start_date_str, user_request.end_date_str)])
     else:
         # find missing dates
         dates = [d[0] for d in rows]
+        # print('data_missing_time_spans', 'OTHER', 'dates', dates)
         start_date = datetime.datetime.strptime(user_request.start_date_str, utils.DATE_FORMAT)
         end_date = datetime.datetime.strptime(user_request.end_date_str, utils.DATE_FORMAT)
-        required = [start_date + datetime.timedelta(days=i) for i in range((end_date - start_date).days + 1)]
+        required = [datetime.datetime.date(start_date + datetime.timedelta(days=i)) for i in range((end_date - start_date).days + 1)]
+        # print('data_missing_time_spans', 'OTHER', 'required', required)
         missing = [d for d in required if d not in dates]
+        # print('data_missing_time_spans', 'OTHER', 'missing', missing)
 
         # convert list of individual dates to list of date spans [(start_i, end_i)]
         spans, span = [], []
@@ -282,10 +287,11 @@ def data_missing_time_spans(user_request) -> tuple:
                     span.append(missing[i])
                 spans.append(('{:%Y-%m-%d}'.format(span[0]), '{:%Y-%m-%d}'.format(span[-1])))
                 span = []
+        print('data_missing_time_spans', 'OTHER', 'spans', spans)
         return tuple(spans)
 
 
-def analyze_statistics(source):
+def clean_data(source):
     """Analyze table statistics"""
     handler = get_handler()
 

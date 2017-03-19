@@ -110,7 +110,6 @@ def integrate_with_logs_api(user_req, dest):
 
                 logger.info('### CLEANING DATA')
                 logs_api.clean_data(api_request)
-                # !!! ADD analyze_statistics
         except Exception as e:
             logger.critical('Iteration #{i} failed'.format(i=i + 1))
             if i == user_req.retries - 1:
@@ -164,7 +163,7 @@ if __name__ == '__main__':
             logger.info('User request: {user_request}'.format(user_request=user_request))
             integrate_with_logs_api(user_request, destination)
 
-    destination.analyze_statistics(user_request.source)
+    destination.clean_data(user_request.source)
 
     end_time = time.time()
     logger.info('### TOTAL TIME: %d minutes %d seconds' % (

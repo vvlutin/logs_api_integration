@@ -140,7 +140,6 @@ def create_table(source, fields):
 
 def save_data(user_req, data, part=None):
     """Inserts data into ClickHouse table"""
-
     if not is_db_present():
         create_db()
 
@@ -155,22 +154,16 @@ def is_data_present(user_request):
     if not is_db_present():
         return False
 
-    # unpack:
-    start_date_str = user_request.start_date_str
-    end_date_str = user_request.end_date_str
-    source = user_request.source
-
-    if not is_table_present(source):
+    if not is_table_present(user_request.source):
         return False
 
-    table_name = get_source_table_name(source)
     query = '''
         SELECT count()
         FROM {table}
         WHERE Date >= '{start_date}' AND Date <= '{end_date}'
-    '''.format(table=table_name,
-               start_date=start_date_str,
-               end_date=end_date_str)
+    '''.format(table=get_source_table_name(user_request.source),
+               start_date=user_request.start_date_str,
+               end_date=user_request.end_date_str)
 
     visits = get_data(query, CH_HOST)
     return visits != ''
@@ -181,7 +174,7 @@ def data_missing_time_spans(user_request) -> tuple:
     pass
 
 
-def analyze_statistics(source):
+def clean_data(source):
     """Stub for compliance with interface"""
     pass
 

@@ -12,12 +12,12 @@ HOST = 'https://api-metrika.yandex.ru'
 
 def get_active_counters(user_request) -> tuple:
     """Returns tuple of available counters as strings"""
-    app = user_request.app_id
-    token = user_request.token
-    reply = requests.get(r'https://api-metrika.yandex.ru/management/v1/counters',
-                         {'id': app, 'oauth_token': token})
+    reply = requests.get('{host}/management/v1/counters'.format(host=HOST),
+                         {'id': user_request.app_id, 'oauth_token': user_request.token})
+
     counters = reply.json()['counters']
     cntrs = [str(c['id']) for c in counters if c['code_status'] == 'CS_OK']
+
     return tuple(cntrs)
 
 
@@ -92,6 +92,7 @@ def create_task(api_request):
                             'source': api_request.user_request.source,
                             'fields': ','.join(api_request.user_request.fields),
                             'oauth_token': api_request.user_request.token})
+
     logger.debug(r.text)
     if r.status_code == 200:
         logger.debug(json.dumps(json.loads(r.text)['log_request'], indent=2))
@@ -140,12 +141,14 @@ def save_data(api_request, part, destination):
         raise ValueError(r.text)
 
     splitted_text = r.text.split('\n')
-    logger.info('### DATA SAMPLE')
-    logger.info('\n' + '\n'.join(splitted_text[:5]))
-
     headers_num = len(splitted_text[0].split('\t'))
     splitted_text_filtered = list(filter(lambda x: len(x.split('\t')) == headers_num, splitted_text))
     num_filtered = len(splitted_text) - len(splitted_text_filtered)
+    logger.info('{rows} rows fetched for counter_id = {counter}, start = {start}, end = {end}.'
+                .format(rows=(len(splitted_text_filtered) - 1),
+                        counter=api_request.user_request.counter_id,
+                        start=api_request.user_request.start_date_str,
+                        end=api_request.user_request.end_date_str))
     if num_filtered != 0:
         filtered_out_file = os.path.join(api_request.user_request.dump_path,
                                          'filtered_{counter}_{start}_{end}_{part}.txt'
@@ -175,6 +178,7 @@ def clean_data(api_request):
                 counter_id=api_request.user_request.counter_id,
                 token=api_request.user_request.token,
                 request_id=api_request.request_id)
+
     r = requests.post(url)
     logger.debug(r.text)
     if r.status_code != 200:
