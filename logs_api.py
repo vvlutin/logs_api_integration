@@ -147,16 +147,17 @@ def save_data(api_request, part, destination):
     splitted_text_filtered = list(filter(lambda x: len(x.split('\t')) == headers_num, splitted_text))
     num_filtered = len(splitted_text) - len(splitted_text_filtered)
     if num_filtered != 0:
-        logger.warning('%d rows were filtered out' % num_filtered)
         filtered_out_file = os.path.join(api_request.user_request.dump_path,
                                          'filtered_{counter}_{start}_{end}_{part}.txt'
                                          .format(counter=api_request.user_request.counter_id,
                                                  start=api_request.user_request.start_date_str,
                                                  end=api_request.user_request.end_date_str,
-                                                 part=api_request.user_request.part))
+                                                 part=part))
         splitted_text_filtered_out = list(filter(lambda x: len(x.split('\t')) != headers_num, splitted_text))
-        with open(filtered_out_file, 'w') as fo:
-            fo.write('\n'.join(splitted_text_filtered_out))
+        if len('\n'.join(splitted_text_filtered_out)) > 0:
+            logger.warning('%d rows were filtered out' % num_filtered)
+            with open(filtered_out_file, 'w') as fo:
+                fo.write('\n'.join(splitted_text_filtered_out))
 
     output_data = '\n'.join(splitted_text_filtered)
     output_data = output_data.replace(r"\'", "'")      # to correct escapes in params

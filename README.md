@@ -49,12 +49,24 @@ On first execution script creates all tables in database according to config. So
 
 ## Running a program
 
-When running the program you need to specify a souce (hits or visits) using option `-source`.
+When running the program you need to specify a souce using option `-source`:
+ * __hits__ - hits metrics
+ * __visits__ - visits metrics
 
-Script has several modes:
+Destination database is specified using `-dest` option:
+ * __clickhouse__ - clickhouse (default)
+ * __vertica__ - vertica
+
+`counter_id` configuration parameter may be overriden with `-counter` option:
+ * required counter_id
+ * __all__ - all available counters
+
+Script has several modes (`-mode` option):
  * __history__ - loads all the data from day one to the day before yesterday
  * __regular__ - loads data only for day before yesterday (recommended for regular downloads)
  * __regular_early__ - loads yesterday data (yesterday data may be not complete: some visits can lack page views)
+
+Instead of using `-mode` option you can specify `-start_date` and `-end_date`. The program will download the data only for dates missing in destination tble for each counter.
  
 Example:
 ```bash

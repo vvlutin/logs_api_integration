@@ -72,8 +72,10 @@ def upload(user_req, handler, content: bytes, part):
                                    .format(counter=user_req.counter_id, start=user_req.start_date_str,
                                            end=user_req.end_date_str, part=part))
     table = get_source_table_name(user_req.source)
+
     with gzip.open(dump_file, 'w') as data_dump:
         data_dump.write(content)
+
     query = """
             COPY {table}
             FROM LOCAL '{file}'
@@ -82,6 +84,7 @@ def upload(user_req, handler, content: bytes, part):
             REJECTED DATA '{rejected}'
             EXCEPTIONS '{exceptions}';
         """.format(table=table, file=dump_file, rejected=rejected_file, exceptions=exceptions_file)
+
     try:
         handler.cursor.execute(query)
     except Exception as e:
@@ -89,6 +92,28 @@ def upload(user_req, handler, content: bytes, part):
                         .format(file=dump_file, table=table))
         disconnect(handler)
         raise e
+
+    # remove data dump
+    try:
+        os.remove(dump_file)
+    except Exception as e:
+        logger.warning('Unable to remove file: {dump}'.format(dump=dump_file))
+    # remove rejected data and exceptions files if empty
+    try:
+        statinfo = os.stat(rejected_file)
+        if statinfo.st_size == 0:
+            logger.info("0 rejects occured: REMOVE '{rejects}'".format(rejects=rejected_file))
+            os.remove(rejected_file)
+    except Exception as e:
+        logger.warning('Unable to remove file: {rejects}'.format(rejects=rejected_file))
+    try:
+        statinfo = os.stat(exceptions_file)
+        if statinfo.st_size == 0:
+            logger.info("0 exceptions occured: REMOVE '{exceptions}'".format(exceptions=exceptions_file))
+            os.remove(exceptions_file)
+    except Exception as e:
+        logger.warning('Unable to remove file: {exceptions}'.format(exceptions=exceptions_file))
+
     # (1) remove dump
     # (2) remove rejected and exceptions if size = 0
 
@@ -213,16 +238,10 @@ def data_missing_time_spans(user_request) -> tuple:
         (user_request.counter_id, user_request.start_date_str, user_request.end_date_str)"""
     handler = get_handler()
 
-    # unpack:
-    start_date_str = user_request.start_date_str
-    end_date_str = user_request.end_date_str
-    counter = user_request.counter_id
-    source = user_request.source
+    if not is_table_present(handler, user_request.source):
+        return tuple([(user_request.start_date_str, user_request.end_date_str)])
 
-    if not is_table_present(handler, source):
-        return start_date_str, end_date_str
-
-    table_name = get_source_table_name(source)
+    table_name = get_source_table_name(user_request.source)
     query = '''
         SELECT
             date,
@@ -232,26 +251,35 @@ def data_missing_time_spans(user_request) -> tuple:
             AND counter_id = {counter}
         GROUP BY 1
         ORDER BY 1;
-    '''.format(table=table_name, start_date=start_date_str, end_date=end_date_str, counter=counter)
+    '''.format(table=table_name, start_date=user_request.start_date_str,
+               end_date=user_request.end_date_str, counter=user_request.counter_id)
 
     rows = get_data(handler, query)
     disconnect(handler)
 
     if len(rows) == 0:
-        return tuple()
+        return tuple([(user_request.start_date_str, user_request.end_date_str)])
     else:
+        # find missing dates
+        dates = [d[0] for d in rows]
+        start_date = datetime.datetime.strptime(user_request.start_date_str, utils.DATE_FORMAT)
+        end_date = datetime.datetime.strptime(user_request.end_date_str, utils.DATE_FORMAT)
+        required = [start_date + datetime.timedelta(days=i) for i in range((end_date - start_date).days + 1)]
+        missing = [d for d in required if d not in dates]
+
+        # convert list of individual dates to list of date spans [(start_i, end_i)]
         spans, span = [], []
-        for i in range(len(rows)):
+        for i in range(len(missing)):
             if len(span) == 0:
-                span.append(rows[i][0])
-            if rows[i][0] - datetime.timedelta(days=1) <= span[-1]:
-                span.append(rows[i][0])
+                span.append(missing[i])
+            if missing[i] - datetime.timedelta(days=1) <= span[-1]:
+                span.append(missing[i])
             else:
                 spans.append(('{:%Y-%m-%d}'.format(span[0]), '{:%Y-%m-%d}'.format(span[-1])))
                 span = []
-            if i + 1 == len(rows):
+            if i + 1 == len(missing):
                 if len(span) == 0:
-                    span.append(rows[i][0])
+                    span.append(missing[i])
                 spans.append(('{:%Y-%m-%d}'.format(span[0]), '{:%Y-%m-%d}'.format(span[-1])))
                 span = []
         return tuple(spans)
@@ -264,7 +292,7 @@ def analyze_statistics(source):
     if is_table_present(handler, source):
         table = get_source_table_name(source)
         try:
-            handler.cursor.execute("""SELECT ANALIZE_STATISTICS('{table}')""".format(table=table))
+            handler.cursor.execute("""SELECT ANALYZE_STATISTICS('{table}');""".format(table=table))
         except Exception as e:
             logger.warning('Unable to analyze statistics for {table}.'.format(table=table))
 

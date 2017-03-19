@@ -48,12 +48,10 @@ def get_date_period(opt):
 
 def build_user_request(conf, opt, counter=None, span=None):
     """Create user request as a named tuple"""
-    logger.info('CLI Options: ' + str(opt))
-
-    if span is None:
+    if span is None or len(span) == 0:
         start_date_str, end_date_str = get_date_period(opt)
     else:
-        start_date_str, end_date_str = span
+        start_date_str, end_date_str = span[0], span[1]
     source = opt.source
 
     # Validate that fields are present in conf
@@ -80,7 +78,6 @@ def build_user_request(conf, opt, counter=None, span=None):
         dump_path=conf['dump_path']
     )
 
-    logger.info(user_req)
     utils.validate_user_request(user_req)  # unnecessary check
     return user_req
 
@@ -94,10 +91,10 @@ def integrate_with_logs_api(user_req, dest):
             api_requests = logs_api.get_api_requests(user_req)
 
             for api_request in api_requests:
-                logger.info('### CREATING TASK')
+                logger.info('### CREATING TASK for counter_id = {counter}, start = {start}, end = {end}'
+                            .format(counter=user_request.counter_id,
+                                    start=user_request.start_date_str, end=user_request.end_date_str))
                 logs_api.create_task(api_request)
-
-                print(api_request)
                 delay = 20
                 while api_request.status != 'processed':
                     logger.info('### DELAY %d secs' % delay)
@@ -153,6 +150,10 @@ if __name__ == '__main__':
 
         # If data for specified period is already in database, script is skipped
         missing_time_spans = destination.data_missing_time_spans(user_request)
+        logger.info('Required timespans for counter_id = {counter}, start = {start}, end = {end}: {ts}'
+                    .format(counter=user_request.counter_id,
+                            start=user_request.start_date_str, end=user_request.end_date_str,
+                            ts=missing_time_spans))
 
         if len(missing_time_spans) == 0:
             logger.info('### DATA IS PRESENT FOR counter={counter}, start_date={start}, end_date={end}'
@@ -160,6 +161,7 @@ if __name__ == '__main__':
 
         for timespan in missing_time_spans:
             user_request = build_user_request(config, options, counter=cntr, span=timespan)
+            logger.info('User request: {user_request}'.format(user_request=user_request))
             integrate_with_logs_api(user_request, destination)
 
     destination.analyze_statistics(user_request.source)
